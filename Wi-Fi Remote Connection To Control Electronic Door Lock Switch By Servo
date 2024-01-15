@@ -1,0 +1,92 @@
+#include <WiFiNINA.h>
+#include <Servo.h>
+#include <ThingSpeak.h>
+
+int initialServoAngle;
+const char* ssid = "wyj";  
+const char* password = "88888888"; 
+const char* apiKey = "KMSF7DK2USRZ7GVP"; 
+const int channelID = 2402429; 
+
+const int servoPin = 8; 
+const int relayPin = 6; 
+const int buttonPin = 7;
+
+
+Servo doorLockServo;
+
+bool buttonPressed = false;
+
+void setup() {
+  Serial.begin(9600);
+  doorLockServo.attach(servoPin);
+  pinMode(relayPin, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP); 
+  connectWiFi();
+}
+void connectWiFi() {
+  Serial.print("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.print(".");
+  }
+  Serial.println("Connected to WiFi");
+}
+
+void loop() {
+  
+  if (digitalRead(buttonPin) == LOW && !buttonPressed) {
+    buttonPressed = true;
+    activateSimulatedDevice();
+    updateThingSpeak(1); 
+  } else if (digitalRead(buttonPin) == HIGH && buttonPressed) {
+    buttonPressed = false;
+    deactivateSimulatedDevice();
+    updateThingSpeak(0); 
+  }
+}
+
+
+
+
+void activateSimulatedDevice() {
+  Serial.println("Activating simulated device...");
+  doorLockServo.write(90);
+  digitalWrite(relayPin, HIGH);
+  initialServoAngle = doorLockServo.read();
+  updateThingSpeak(1);
+}
+
+
+void deactivateSimulatedDevice() {
+  Serial.println("Deactivating simulated device...");
+  doorLockServo.write(0);
+  digitalWrite(relayPin, LOW);
+  initialServoAngle = doorLockServo.read(); 
+  updateThingSpeak(0);
+}
+
+void updateThingSpeak(int status) {
+  WiFiClient client;
+  client.setTimeout(10000); 
+
+  if (client.connect("api.thingspeak.com", 80)) {
+    String url = "/update?api_key=" + String(apiKey) + "&field1=" + String(status) +
+                 "&field2=" + String(initialServoAngle) +
+                 "&field3=" + String(digitalRead(buttonPin)) +
+                 "&field4=" + String(initialServoAngle);
+
+    String request = "GET " + url + " HTTP/1.1\r\n" +
+                     "Host: api.thingspeak.com\r\n" +
+                     "Connection: close\r\n\r\n";
+    client.print(request);
+    delay(1000); 
+    client.stop();
+    Serial.println("Connecting to ThingSpeak...");
+    Serial.println("ThingSpeak update successful");
+  } else {
+    Serial.println("Unable to connect to ThingSpeak");
+  }
+}
+
